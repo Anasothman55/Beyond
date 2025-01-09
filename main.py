@@ -7,12 +7,11 @@ from datetime import datetime, date
 app = FastAPI()
 
 
-"""
 @app.get("/headers/")
 async def get_test_header(accept: str = Header(None), content_type: str = Header(None)):
   req_headers = {"Accept": accept, "Content-Type": content_type}
   return req_headers
-"""
+
 
 
 #! schemas
