@@ -1,6 +1,6 @@
 from typing import Annotated, List
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, Query, Header, Path, status, HTTPException, Body
+from fastapi import FastAPI, Query, Header, Path, status, HTTPException, Body, Request
 from books import books_data
 from datetime import datetime, date
 
@@ -15,6 +15,7 @@ async def get_test_header(accept: str = Header(None), content_type: str = Header
 """
 
 
+#! schemas
 class BookBase(BaseModel):
   id: int
   title: str
@@ -23,7 +24,6 @@ class BookBase(BaseModel):
   published_date: date
   page_count: int
   language: str
-
 class UpdateBook(BaseModel):
   title: str | None = None
   author: str | None = None
@@ -32,7 +32,9 @@ class UpdateBook(BaseModel):
   page_count: int | None = Field(None, gt=0)
   language: str | None = None
 
-def get_one_book(bid: int, bdb: list):
+
+#! endpoint
+def get_one_book(bid: int,bdb: list):
   for book in bdb:
     if book.get("id") == bid:
       return  book
@@ -40,8 +42,11 @@ def get_one_book(bid: int, bdb: list):
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
 @app.get("/books", response_model= List[BookBase], status_code= status.HTTP_200_OK)
-async  def get_all_books():
-  return books_data
+async  def get_all_books(
+    start: Annotated[int, Query(ge=0)] =0,
+    limit: Annotated[int, Query()] = len(books_data)-1
+  ):
+  return books_data[start:limit+start]
 
 @app.post("/books", response_model= BookBase, status_code= status.HTTP_201_CREATED)
 async def add_book(book_req: Annotated[BookBase, Body(embed=True)]) -> dict:
@@ -63,6 +68,7 @@ async  def patch_a_book(book_id: Annotated[int, Path(gt=0)], req_data: Annotated
       book[k] = req_data_dict[k]
   return book
 
+
 @app.delete("/books/{book_id}", status_code= status.HTTP_204_NO_CONTENT)
 async  def delete_a_book(book_id: Annotated[int, Path(gt=0)]):
   book = get_one_book(book_id, books_data)
@@ -70,7 +76,6 @@ async  def delete_a_book(book_id: Annotated[int, Path(gt=0)]):
 
 
 
-
 if __name__ == "__main__":
   import uvicorn
-  uvicorn.run("main:app", port=8001, reload=True)
+  uvicorn.run("main:app", port=8000, reload=True)
