@@ -1,11 +1,9 @@
-from typing import Annotated, List, Sequence
-from fastapi import APIRouter, Query, Path, status, HTTPException, Body, Depends
-from app.books.books import books_data
+from typing import Annotated, List
+from fastapi import APIRouter, Query, Path, status, Body, Depends
 from app.books.schemas import BookBase,ReturnAllBook,UpdateBook, SortEnum
 from app.db.index import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
-from .models import BookModel
 from .service import get_all_books as gab, create_book, get_a_book, update_book, delete_book
 import uuid
 
@@ -20,10 +18,10 @@ async  def get_all_books(
     *,
     session:Annotated[AsyncSession, Depends(get_session)],
     order_by: Annotated[SortEnum, Query()] = "created_at",
-    decending: Annotated[bool, Query()] = False
+    descending: Annotated[bool, Query()] = False
   ):
   order_by = str(order_by).lower()
-  if decending:
+  if descending:
     order_by = f"-{order_by}"
   service_data = await gab(session, order_by)
   return service_data
@@ -48,7 +46,6 @@ async  def patch_a_book(
   req_data: Annotated[UpdateBook, Body()],
   session:Annotated[AsyncSession, Depends(get_session)]
   ) -> dict:
-  print(req_data)
   book = await update_book(book_id, req_data,session)
   return book
 

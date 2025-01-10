@@ -62,7 +62,12 @@ async def health_check_postgresql(session: AsyncSession = Depends(get_session)):
 
 app.include_router(book_routes, prefix=f"/api/{version}/books",)
 
-
+"""
+alembic
+1- alembic init -t async migrations
+2-  alembic revision --autogenerate -m "first migration"
+3- alembic upgrade 6ee2833b7ea8    
+"""
 
 if __name__ == "__main__":
   import uvicorn

@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 from .schemas import BookBase,UpdateBook
-from sqlmodel import select, desc, asc,Session
+from sqlmodel import select, desc, asc
 from .models import BookModel
 from fastapi import HTTPException, status
 
@@ -39,15 +39,14 @@ async def create_book( book_data: BookBase, session: AsyncSession):
   return new_book.model_dump()
 async def update_book( uid:uuid.UUID ,book_data: UpdateBook,session: AsyncSession):
   get_book = await get_by_uid(uid, session)
-  update_book = book_data.model_dump()
+  update_a_book = book_data.model_dump()
   
-  for k, v in update_book.items():
+  for k, v in update_a_book.items():
     if v:
       setattr(get_book, k, v)
   
   await session.commit()
   await session.refresh(get_book)
-  
   return get_book
 async def delete_book(uid:uuid.UUID ,session: AsyncSession):
   get_book = await get_by_uid(uid, session)
