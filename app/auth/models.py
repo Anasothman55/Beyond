@@ -16,6 +16,7 @@ class UserModel(SQLModel, table=True, ):
   first_name: str = Field(index=True)
   last_name: str = Field(index=True)
   is_verified: bool = Field(default = False)
+  password_hash: str = Field(exclude=True)
   created_at: datetime = Field(sa_column=Column(pg.TIMESTAMP(timezone=True), default= datetime.now(timezone.utc)))
   updated_at: datetime = Field(
     sa_column=Column(pg.TIMESTAMP(timezone=True), default= datetime.now(timezone.utc), onupdate= datetime.now(timezone.utc))

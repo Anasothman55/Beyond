@@ -6,10 +6,10 @@ import enum
 
 
 class UserBase(BaseModel):
-  username: str
-  email: EmailStr
-  first_name: str = Field(max_length= 128, pattern=r"^[A-Za-z]$")
-  last_name: str = Field(max_length= 128, pattern=r"^[A-Za-z]$")
+  username: str = Field(max_length= 128)
+  email: EmailStr =  Field(max_length= 128)
+  first_name: str = Field(None, max_length= 128, pattern=r"^[A-Za-z]+$")
+  last_name: str = Field(None,max_length= 128, pattern=r"^[A-Za-z]+$")
 
   model_config = ConfigDict(
     str_strip_whitespace=True,
@@ -81,10 +81,17 @@ class GetUser(UserBase):
     }
   )
 
+class TokenBase(BaseModel):
+  access_token: str
+  token_type: str
+
+class TokenSchema(TokenBase):
+  refresh_token: str
 
 
-
-
+class TokenData(BaseModel):
+  uid: uuid.UUID | None = None
+  refresh: bool = False
 
 
 
