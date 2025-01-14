@@ -85,9 +85,6 @@ class TokenBase(BaseModel):
   access_token: str
   token_type: str
 
-class TokenSchema(TokenBase):
-  refresh_token: str
-
 
 class TokenData(BaseModel):
   uid: uuid.UUID | None = None

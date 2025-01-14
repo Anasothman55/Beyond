@@ -5,7 +5,7 @@ from app.auth.routes import routes as auth_routes
 from contextlib import asynccontextmanager
 from app.db.index import get_session,AsyncSession,close_db_connection,init_db
 from fastapi.responses import JSONResponse, RedirectResponse
-from app.db.redis import r
+from app.db.redis import token_manager
 import logging
 
 
@@ -58,7 +58,7 @@ async def health_check_postgresql(session: AsyncSession = Depends(get_session)):
     # Test database connection
     result = await session.execute(text("SELECT 1"))
     await session.commit()
-    redis_helth = await r.set('foo', 'anas othman')
+    redis_helth = await token_manager.redis.set('foo', 'anas othman')
     
     if not redis_helth:
       raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis connection failed")
@@ -87,10 +87,10 @@ app.include_router(auth_routes, prefix=f"/api/{version}/auth",)
 """
 alembic
 1- alembic init -t async migrations
-2-  alembic revision --autogenerate -m "first migration"
-3- alembic upgrade 6ee2833b7ea8    
+2-  alembic revision --autogenerate -m "first add role"
+3- alembic upgrade 8e4ef23f7674    
 """
-
+  
 
 
 

@@ -1,18 +1,50 @@
-from pydantic import EmailStr
+# services
+
+
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
-from watchfiles import awatch
-from .schemas import UserRegister, UserBase, UserLogin, GetUser
-from sqlmodel import select, desc, asc
+from .schemas import UserRegister
 from sqlalchemy.exc import IntegrityError
 from .models import UserModel
 from fastapi import HTTPException, status
 from app.auth import hash_password_utils, verify_password_utils
-from .utils import get_user_by_uid,authenticate_user, create_access_token,create_refresh_token, jwt_decode, JWTError, ExpiredSignatureError
+from .utils import get_user_by_uid,authenticate_user, create_access_token,create_refresh_token, jwt_decode, JWTError, ExpiredSignatureError, httpresponse
 from ..config import settings
 from datetime import timedelta
 from fastapi.security import OAuth2PasswordRequestForm
-from app.db.redis import is_token_blacklisted, get_refresh_token, store_refresh_token,blacklist_access_token, blacklist_refresh_token, delete_refresh_token, is_token_jit_blacklisted
+from app.db.redis import RedisManager
+from app.autils import http_exception
+
+
+
+redis_config = {
+  'host': settings.UPSTASH_REDIS_HOST,
+  'port': settings.UPSTASH_REDIS_PORT,
+  'password': settings.UPSTASH_REDIS_PASSWORD,
+  'ssl': settings.UPSTASH_REDIS_SSL
+}
+
+# Initialize token manager
+token_manager = RedisManager(redis_config)
+
+async def make_token(user_uid,username):
+  jit = str(uuid.uuid4())
+  fid = str(uuid.uuid4())
+  access_token_expire = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+  access_token = create_access_token(
+    data={"sub": str(user_uid), "username": username, "jit": jit, "fid": fid},
+    expires_delta=access_token_expire
+  )
+  refresh_token_expire = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+  refresh_token = create_refresh_token(
+    data={"sub": str(user_uid), "fti": str(uuid.uuid4()), "fid": fid}, expires_delta=refresh_token_expire
+  )
+  await token_manager.store_refresh_token(user_id=user_uid, refresh_token=refresh_token,ttl_days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+  return {
+    "access_token": access_token,
+    "token_type": "bearer"
+  }
 
 
 
@@ -47,88 +79,32 @@ async def user_login_service(form_data: OAuth2PasswordRequestForm, session: Asyn
   #!if not user.is_verified:
   #!  raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified")
   
-  jit =  str(uuid.uuid4())
-  access_token_expire = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-  access_token = create_access_token (
-    data={"sub": str(user.uid), "username":user.username, "jit": jit}, expires_delta=access_token_expire
-  )
-  refresh_token_expire = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-  refresh_token = create_refresh_token(
-    data={"sub": str(user.uid),"ati": jit}, expires_delta=refresh_token_expire
-  )
-  
-  setRedis = await store_refresh_token(user_id=user.uid, refresh_token= refresh_token,ttl_days= settings.REFRESH_TOKEN_EXPIRE_DAYS)
-  if not setRedis:
-    raise HTTPException(
-      status_code=status.HTTP_401_UNAUTHORIZED,
-      detail="No valid session found"
-    )
-    
-  return {"access_token": access_token,"refresh_token":refresh_token, "token_type": "bearer"}
+  maketoken = await make_token(user.uid, user.username)
+  return maketoken
+
 
 
 
 async def refresh_token_service(current_token: str):
   try:
-    # Get user ID from expired access token
     payload = jwt_decode(current_token, options={"verify_exp": False})
-    user_id = payload.get("sub")
-    jit = payload.get("jit")
+    user_uid = payload.get("sub")
 
-    is_in_jit_black_list = await is_token_jit_blacklisted(jit)
+    srt = await token_manager.get_refresh_token(user_uid)
+    refresh_payload = jwt_decode(srt)
+    await token_manager.is_token_blacklisted(refresh_payload.get("fti"))
 
-    if is_in_jit_black_list:
+    if user_uid != refresh_payload.get("sub"):
+      raise HTTPException( status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    if payload.get('fid') != refresh_payload.get('fid'):
       raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="JIT token has been blacklisted"
+        detail="Un match refresh token and access token"
       )
 
-    stored_refresh_token = await get_refresh_token(user_id=user_id)
-    if not stored_refresh_token:
-      raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No valid session found"
-      )
-    
-    is_in_black_list = await is_token_blacklisted(stored_refresh_token)
-    if is_in_black_list:
-      raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Refresh token has been blacklisted"
-      )
-
-    # Verify the refresh token
-    refresh_payload = jwt_decode(stored_refresh_token)
-    refresh_user_id = refresh_payload.get("sub")
-    if user_id!= refresh_user_id:
-      raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid refresh token"
-      )
-
-    jit_blacklist = await blacklist_access_token(jit)
-    print(jit_blacklist)
-    if not jit_blacklist:
-      raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Failed to blacklist access token"
-      )
-
-    # Create new access token
-    jit = str(uuid.uuid4())
-    access_token = create_access_token(
-      data={
-        "sub": user_id,
-        "username": refresh_payload.get("username"),
-        "jit": jit
-      },
-      expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-
-    return {
-      "access_token": access_token,
-      "token_type": "bearer"
-    }
+    maketoken = await make_token(user_uid, payload.get('username'))
+    return maketoken
 
   except ExpiredSignatureError:
       # Handle expired JWT token
@@ -138,69 +114,24 @@ async def refresh_token_service(current_token: str):
       raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")
 
 
-async def logout_service(token: dict):
+async def logout_service(token_to_decode):
   try:
-    # Decode the token
-    token_decode = token
-    user_uid = token_decode.get("sub")
-    jit = token_decode.get("jit")
+    token = jwt_decode(token_to_decode)
+    user_uid = str(token.get("sub"))
+    srt = await token_manager.get_refresh_token(user_uid)
+    refresh_payload = jwt_decode(srt)
 
-    if not user_uid or not jit:
-      raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid token"
-      )
-
-    # Blacklist the JIT (JWT ID) for the access token
-    jit_blacklist = await blacklist_access_token(jit)
-    print(jit_blacklist)
-    if not jit_blacklist:
-      raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Failed to blacklist access token"
-      )
-
-    # Retrieve and validate the refresh token
-    stored_refresh_token = await get_refresh_token(user_id=user_uid)
-    if not stored_refresh_token:
-      raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No valid session found"
-      )
-
-    # Check if the refresh token is already blacklisted
-    if await is_token_blacklisted(stored_refresh_token):
-      raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Refresh token has been blacklisted"
-      )
-
-    # Verify the refresh token belongs to the user
-    refresh_payload = jwt_decode(stored_refresh_token)
     if refresh_payload.get("sub") != user_uid:
       raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid refresh token"
       )
 
-
-    # Blacklist the refresh token
-    refresh_token_add_blacklist = await blacklist_refresh_token(stored_refresh_token)
-    if not refresh_token_add_blacklist:
-      raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Failed to blacklist refresh token"
-      )
-
-    delete_result = await delete_refresh_token(user_uid,stored_refresh_token)
-    if not delete_result:
-      raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Failed to delete refresh token from Redis"
-      )
+    await token_manager.blacklist_refresh_token(refresh_payload.get('fti'))
+    await token_manager.blacklist_access_token(token.get('jit'))
+    await token_manager.delete_refresh_token(user_uid)
 
     return {"message": "Logout successful"}
-
   except ExpiredSignatureError:
     raise HTTPException(
       status_code=status.HTTP_401_UNAUTHORIZED,
@@ -211,11 +142,7 @@ async def logout_service(token: dict):
       status_code=status.HTTP_401_UNAUTHORIZED,
       detail=f"Invalid token: {str(e)}"
     )
-  except Exception as e:
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail=f"An error occurred: {str(e)}"
-    )
+
 
 
 

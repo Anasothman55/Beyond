@@ -1,24 +1,27 @@
 from typing import Annotated, List
-from fastapi import APIRouter, Query, Path, status, Body, Depends
+from fastapi import APIRouter, Query, Path, status, Body, Depends, Request
 from app.books.schemas import BookBase,ReturnAllBook,UpdateBook, SortEnum
 from app.db.index import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 from .service import get_all_books as gab, create_book, get_a_book, update_book, delete_book
 import uuid
-
+from rich import  print
 
 
 routes = APIRouter(tags=["Books"])
 
-
+@routes.get("/req_check")
+async def get_req_check(req: Request):
+  print(req.__dict__.get('_send'))
+  return "anas"
 
 @routes.get("/", response_model= List[ReturnAllBook], status_code= status.HTTP_200_OK)
 async  def get_all_books(
     *,
     session:Annotated[AsyncSession, Depends(get_session)],
     order_by: Annotated[SortEnum, Query()] = "created_at",
-    descending: Annotated[bool, Query()] = False
+    descending: Annotated[bool, Query()] = False,
   ):
   order_by = str(order_by).lower()
   if descending:
@@ -56,4 +59,5 @@ async  def delete_a_book(
   session:Annotated[AsyncSession, Depends(get_session)]
   ):
   await delete_book(book_id, session)
+
 

@@ -1,16 +1,17 @@
 from typing import Annotated
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from .utils import jwt_decode, get_user_by_uid
-from app.db.redis import is_token_jit_blacklisted
 import uuid
 from app.db.index import get_session
 from .schemas import TokenData
 from jose.exceptions import JWTError, ExpiredSignatureError
+from app.db.redis import token_manager
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="access_token")
+
 
 
 async def get_current_user(
@@ -36,13 +37,14 @@ async def get_current_user(
     if uid is None:
       raise credentials_exception
 
-    is_in_jit_black_list = await is_token_jit_blacklisted(payload.get("jit"))
-
-    if is_in_jit_black_list:
+    jit = payload.get("jit")
+    if not jit:
       raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="JIT token has been blacklisted"
+        detail="Invalid JIT token"
       )
+
+    await token_manager.is_jit_blacklisted(jit)
 
     token_data = TokenData(uid=uid)
     user = await get_user_by_uid(token_data.uid, session)
@@ -50,7 +52,7 @@ async def get_current_user(
     if user is None:
       raise credentials_exception
 
-    return {"current_user":user, "token":payload}
+    return {"current_user":user, "token":token}
 
   except ExpiredSignatureError:
     raise HTTPException(

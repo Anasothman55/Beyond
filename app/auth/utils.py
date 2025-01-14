@@ -8,8 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from .models import UserModel
 import uuid
-from app.db.redis import is_token_jit_blacklisted
-
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -92,3 +90,7 @@ async def authenticate_user(session: AsyncSession, email: EmailStr, password: st
     )
 
   return user
+
+
+def httpresponse(status, details: dict):
+  raise HTTPException(status_code= status, detail=details)
