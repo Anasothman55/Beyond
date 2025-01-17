@@ -11,6 +11,13 @@ class Settings(BaseSettings):
   UPSTASH_REDIS_PORT: int
   UPSTASH_REDIS_PASSWORD: str
   UPSTASH_REDIS_SSL: bool | None = True
+  MAIL_USERNAME : str
+  MAIL_PASSWORD : str
+  MAIL_FROM : str
+  MAIL_SERVER : str
+  MAIL_FROM_NAME : str
+
+  DOMAIN: str
 
   model_config = SettingsConfigDict(
     env_file=".env",
@@ -19,7 +26,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-
-
 

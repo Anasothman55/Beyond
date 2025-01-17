@@ -1,13 +1,22 @@
+import logging
+
 from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from datetime import timezone, timedelta, datetime
 from jose import JWTError, jwt,ExpiredSignatureError
+from sqlalchemy.orm import joinedload,selectinload
+from rich import print
 from app.config import settings
 from pydantic import EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from .models import UserModel
+from app.db.models import UserModel
 import uuid
+from itsdangerous import URLSafeTimedSerializer
+
+
+
+
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -55,14 +64,16 @@ def jwt_decode(token: str, options: dict | None = None):
       payload = jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)
     return payload
   except JWTError as jex:
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(jex))
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={'error': str(jex), 'message': "Invalid"})
 
 
 
 async def get_user_by_uid(uid: uuid.UUID, session: AsyncSession):
   statement = select(UserModel).where(UserModel.uid == uid)
   result = await session.execute(statement)
-  return result.scalars().first()
+  user = result.scalar_one_or_none()
+
+  return user
 
 
 async def get_user_by_email(email:EmailStr, session: AsyncSession):
@@ -94,3 +105,26 @@ async def authenticate_user(session: AsyncSession, email: EmailStr, password: st
 
 def httpresponse(status, details: dict):
   raise HTTPException(status_code= status, detail=details)
+
+
+
+
+serializer = URLSafeTimedSerializer(
+  secret_key=settings.SECRET_KEY,
+  salt="email-config"
+)
+
+def create_url_safe_token(data: dict):
+  token = serializer.dumps(data)
+  return token
+
+def decode_url_safe_token(token: str):
+  try:
+    token_data = serializer.loads(token)
+    return token_data
+  except Exception as e:
+    logging.error(str(e))
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"message": "Invalid token"})
+
+
+

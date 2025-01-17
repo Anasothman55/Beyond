@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 from .schemas import UserRegister
 from sqlalchemy.exc import IntegrityError
-from .models import UserModel
+from app.db.models import UserModel
 from fastapi import HTTPException, status
-from app.auth import hash_password_utils, verify_password_utils
+from .utils import hash_password_utils, verify_password_utils
 from .utils import get_user_by_uid,authenticate_user, create_access_token,create_refresh_token, jwt_decode, JWTError, ExpiredSignatureError, httpresponse
 from ..config import settings
 from datetime import timedelta
@@ -63,6 +63,7 @@ async def register_service(
     await session.commit()
     await session.refresh(new_user)
 
+
     return new_user.model_dump()
   except IntegrityError as iex:
     raise HTTPException(
@@ -76,8 +77,8 @@ async def register_service(
 async def user_login_service(form_data: OAuth2PasswordRequestForm, session: AsyncSession):
   user = await authenticate_user(session, form_data.username, form_data.password)
 
-  #!if not user.is_verified:
-  #!  raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified")
+  if not user.is_verified:
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified")
   
   maketoken = await make_token(user.uid, user.username)
   return maketoken

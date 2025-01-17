@@ -1,12 +1,17 @@
 from sqlalchemy import text
 from fastapi import FastAPI, status, HTTPException, Depends, Response
-from app.books.routes import routes as book_routes
+from sqlalchemy.testing.config import any_async
+from middleware import register_middleware
+from app.books.routes import routes as book_routes, global_book as global_book_routes
 from app.auth.routes import routes as auth_routes
+from app.review.route import route as review_routes
 from contextlib import asynccontextmanager
 from app.db.index import get_session,AsyncSession,close_db_connection,init_db
 from fastapi.responses import JSONResponse, RedirectResponse
 from app.db.redis import token_manager
 import logging
+
+
 
 
 @asynccontextmanager
@@ -38,11 +43,10 @@ app = FastAPI(
   title="Book API",
   version=version,
   description="A simple REST API for managing books.",
-  openapi_url=f"/openapi/{version}",
   lifespan=life_span
 )
 
-
+#http://127.0.0.1:8000/openapi.json
 logger = logging.getLogger(__name__)
 
 """
@@ -75,20 +79,34 @@ async def health_check_postgresql(session: AsyncSession = Depends(get_session)):
       detail=f"Database connection failed: {str(e)}"
     )
 
+"""
 @app.get("/portal")
 async def get_portal(teleport: bool = False) -> Response:
     if teleport:
         return RedirectResponse(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     return JSONResponse(content={"message": "Here's your interdimensional portal."})
+"""
 
-app.include_router(book_routes, prefix=f"/api/{version}/books",)
+@app.exception_handler(500)
+async def internal_server_error(request, ext):
+  return JSONResponse(
+    status_code= status.HTTP_500_INTERNAL_SERVER_ERROR,
+    content={"detail": "Internal Server Error", "error": str(ext)}
+  )
+
+register_middleware(app)
+
+
 app.include_router(auth_routes, prefix=f"/api/{version}/auth",)
+app.include_router(global_book_routes, prefix=f"/api/{version}/global_books",)
+app.include_router(book_routes, prefix=f"/api/{version}/books",)
+app.include_router(review_routes, prefix=f"/api/{version}/reviews")
 
 """
 alembic
 1- alembic init -t async migrations
-2-  alembic revision --autogenerate -m "first add role"
-3- alembic upgrade 8e4ef23f7674    
+2-  alembic revision --autogenerate -m "add review table"
+3- alembic upgrade 4fa398e4f096    
 """
   
 

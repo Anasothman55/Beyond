@@ -2,6 +2,10 @@ from datetime import datetime, date
 from pydantic import BaseModel, Field, ConfigDict, EmailStr,field_validator
 import uuid
 import enum
+from app.books.schemas import BookBase
+from typing import  List, Optional
+from app.review.schemas import ReviewSchema
+
 
 
 
@@ -22,6 +26,8 @@ class UserBase(BaseModel):
       }
     }
   )
+
+
 
 class UserRegister(UserBase):
   password: str = Field(min_length=8)
@@ -63,13 +69,19 @@ class UserLogin(BaseModel):
   )
 
 
+class UserBase2(UserBase):
+  uid: uuid.UUID
+
 class GetUser(UserBase):
   uid: uuid.UUID
   updated_at: datetime
   created_at: datetime
   is_verified: bool
+  book: Optional[List[BookBase]] = []
+  review: Optional[List[ReviewSchema]] = []
 
   model_config = ConfigDict(
+    from_attributes=True,
     str_strip_whitespace=True,
     json_schema_extra={
       "example": {
@@ -91,4 +103,8 @@ class TokenData(BaseModel):
   refresh: bool = False
 
 
+
+
+class EmailBaseModel(BaseModel):
+  address: List[EmailStr]
 

@@ -1,7 +1,9 @@
 from datetime import datetime, date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import uuid
 import enum
+from typing import Optional, List
+from app.review.schemas import ReviewSchema
 
 
 #! Enum
@@ -27,12 +29,19 @@ class BookBase(BaseModel):
   page_count: int
   language: str
 
+  model_config = ConfigDict(
+    from_attributes=True
+  )
 
 
 class ReturnAllBook(BookBase):
   uid: uuid.UUID
+  user_uid: uuid.UUID
   updated_at: datetime
   created_at: datetime
+
+class ReturnAllBookReview(ReturnAllBook):
+  review: Optional[List[ReviewSchema]] = []
 
 class UpdateBook(BaseModel):
   title: str | None = None

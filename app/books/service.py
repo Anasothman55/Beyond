@@ -2,8 +2,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 from .schemas import BookBase,UpdateBook
 from sqlmodel import select, desc, asc
-from .models import BookModel
+from app.db.models import BookModel
 from fastapi import HTTPException, status
+
+
+
 
 
 async def get_by_uid(uid: uuid.UUID, session: AsyncSession):
@@ -12,15 +15,18 @@ async def get_by_uid(uid: uuid.UUID, session: AsyncSession):
   return result.scalars().first()
 
 
-async def get_all_books(session: AsyncSession, order_by: str = 'created_at'):
+async def get_all_books(session: AsyncSession, order_by: str = 'created_at', user_uid: str| None = None ):
   order_column = getattr(BookModel, order_by, BookModel.created_at)
   
   if order_by.startswith('-'):
     order_column = desc(order_column)  
   else:
     order_column = asc(order_column)
-  
+
+
   statement = select(BookModel).order_by(order_column)
+  if user_uid:
+    statement = statement.where(BookModel.user_uid == user_uid)
   result = await session.execute(statement)
   
   return result.scalars().all()
@@ -28,9 +34,9 @@ async def get_a_book( uid:uuid.UUID ,session: AsyncSession):
   book = await get_by_uid(uid, session)
   if not book:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book with uid {uid} not found")
-  return book.model_dump()
-async def create_book( book_data: BookBase, session: AsyncSession):
-  new_book = BookModel(**book_data.model_dump())
+  return book
+async def create_book( book_data: BookBase, session: AsyncSession, user_uid: uuid.UUID):
+  new_book = BookModel(**book_data.model_dump(), user_uid=user_uid)
   
   session.add(new_book)
   await session.commit()

@@ -48,9 +48,14 @@ async def get_current_user(
 
     token_data = TokenData(uid=uid)
     user = await get_user_by_uid(token_data.uid, session)
-
     if user is None:
       raise credentials_exception
+
+    if not user.is_verified:
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="User is not verified"
+      )
 
     return {"current_user":user, "token":token}
 
